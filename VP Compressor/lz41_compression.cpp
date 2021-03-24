@@ -684,7 +684,7 @@ void compress_vp(char *fn_in, char *fn_out, const LZ41CONFIG *config, THREAD_INF
         if (index[x].offset != 0 && index[x].filesize != 0 && index[x].timestamp != 0)
         {
             char* file_extension = strrchr(index[x].name, '.');
-            char* file = load_vp_file(vp_in, index[x]);
+            char* file = load_vp_file(vp_in, &index[x]);
             strcpy(ti->vp_file, index[x].name);
 
             if (file_extension != nullptr)
@@ -815,7 +815,13 @@ void decompress_vp(const char* fn_in, const char* fn_out, const LZ41CONFIG *conf
     char header[5];
     unsigned int version, index_offset, numfiles, count = 1, wvp_num_files = 0, wvp_index_offset = 16;
     FILE* vp_in = fopen(fn_in, "rb");
-    FILE* vp_out = fopen(fn_out, "wb");
+
+    std::string temp_out=fn_out;
+    size_t pos = temp_out.find("_vpc.vp");
+    if(pos != std::string::npos)
+        temp_out.replace(pos, 7, ".vp");
+
+    FILE* vp_out = fopen(temp_out.c_str(), "wb");
     if(config->verbose)
         std::cout << "\nDECOMPRESSING FILE : " << fn_in;
     if (config->log != nullptr)
@@ -832,19 +838,17 @@ void decompress_vp(const char* fn_in, const char* fn_out, const LZ41CONFIG *conf
         return;
     }
 
-    vp_index_entry* index;
-    index = (vp_index_entry*)malloc(sizeof(vp_index_entry) * numfiles);
+    vp_index_entry* index = (vp_index_entry*)malloc(sizeof(vp_index_entry) * numfiles);
     load_vp_index(vp_in, index, index_offset, numfiles);
 
-    vp_index_entry* index_out;
-    index_out = (vp_index_entry*)malloc(sizeof(vp_index_entry) * numfiles);
+    vp_index_entry* index_out = (vp_index_entry*)malloc(sizeof(vp_index_entry) * numfiles);
 
     for (unsigned int x = 0; x < numfiles; x++)
     {
         if (index[x].offset != 0 && index[x].filesize != 0 && index[x].timestamp != 0)
         {
             char* file;
-            file = load_vp_file(vp_in, index[x]);
+            file = load_vp_file(vp_in, &index[x]);
             int original_size;
             char* uncompressed_bytes;
             char file_header[5];

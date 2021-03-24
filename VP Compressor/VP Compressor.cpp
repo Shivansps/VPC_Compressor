@@ -8,13 +8,13 @@ using namespace std;
 namespace fs = filesystem;
 #pragma warning(disable:4996)
 
-#define VPC_VERSION "1.0"
+#define VPC_VERSION "1.1"
 #define DEFAULT_IGNORE_LIST ".ogg .wav .fc2 .fs2 .tbm .tbl"
 #define DEFAULT_MINIMUM_SIZE 10240
 #define DEFAULT_MAX_THREADS 4
 #define DEFAULT_BLOCK_SIZE 65536
-#define DEFAULT_COMPRESSION_LEVEL 6 /* 1 to 4 LZ4, 5 to 12 LZ4-HC. Recomended: 6 */
-#define DEFAULT_FIX_POFS 0 /* Convert pof files to version 2118, 1=Enabled, 0=Disabled */
+#define DEFAULT_COMPRESSION_LEVEL 6
+#define DEFAULT_FIX_POFS 0
 #define DEFAULT_COMPRESS_ONLY_VP 0
 #define DEFAULT_TAG_COMPRESSED_VP 0
 #define SYSTEM_IGNORE_LIST ".exe .ini .dll .log .reg .sys .lnk"
@@ -24,14 +24,16 @@ void decompress_folder(LZ41CONFIG *config, const char * path);
 void compress_file(LZ41CONFIG* config, const char* pathc);
 void decompress_file(LZ41CONFIG* config, const char* pathc);
 bool parsecmd(int argc, char* argv[], LZ41CONFIG* config);
-void load_config(LZ41CONFIG *mainconfig);
+void load_config(LZ41CONFIG *mainconfig, char* argv[]);
 void ui_header(LZ41CONFIG *mainconfig);
 void ui_gauges(THREAD_INFO* ti, LZ41CONFIG *config);
+void windows_compress_cmd(char* path_in, LZ41CONFIG* config, char* root);
+void windows_decompress_cmd(char* path_in, LZ41CONFIG* config, char* root);
 
 int main(int argc, char* argv[])
 {
     LZ41CONFIG mainconfig;
-    load_config(&mainconfig);
+    load_config(&mainconfig,argv);
 
     if (parsecmd(argc,argv,&mainconfig))
         return 0;
@@ -49,7 +51,9 @@ int main(int argc, char* argv[])
     cout << " =>Press any key to compress all files inside the working folder or close the application.\n\n\n\n";
 
     system("pause");
-    mainconfig.log = fopen("last.log", "wt");
+
+    auto log_path = fs::path(fs::current_path().append("vpc_log.log")).string();
+    mainconfig.log = fopen(log_path.c_str(), "wt");
     compress_folder(&mainconfig, fs::current_path().string().c_str());
     fclose(mainconfig.log);
 	return 0;
@@ -59,40 +63,227 @@ bool parsecmd(int argc, char* argv[],LZ41CONFIG *config)
 {
     if (argc > 2)
     {
+        ui_header(config);
+        auto log_path = fs::path(argv[0]).parent_path().append("vpc_log.log").string();
         if (strcmp(argv[1], "/compress_folder") == 0)
         {
-            config->log = fopen("last.log", "wt");
+            config->log = fopen(log_path.c_str(), "wt");
             if(fs::exists(argv[2]))
                 compress_folder(config, argv[2]);
             fclose(config->log);
         }
         if (strcmp(argv[1], "/decompress_folder") == 0)
         {
-            config->log = fopen("last.log", "wt");
+            config->log = fopen(log_path.c_str(), "wt");
             if (fs::exists(argv[2]))
                 decompress_folder(config, argv[2]);
             fclose(config->log);
         }
         if (strcmp(argv[1], "/compress_file") == 0)
         {
-            config->log = fopen("last.log", "wt");
+            config->log = fopen(log_path.c_str(), "wt");
             if (fs::exists(argv[2]))
                 compress_file(config, argv[2]);
             fclose(config->log);
         }
         if (strcmp(argv[1], "/decompress_file") == 0)
         {
-            config->log = fopen("last.log", "wt");
+            config->log = fopen(log_path.c_str(), "wt");
             if (fs::exists(argv[2]))
                 decompress_file(config, argv[2]);
             fclose(config->log);
-        }     
+        }
+        if (strcmp(argv[1], "/wincomp") == 0)
+        {
+            config->log = fopen(log_path.c_str(), "wt");
+            if (fs::exists(argv[2]))
+                windows_compress_cmd(argv[2],config,argv[0]);
+            fclose(config->log);
+        }
+        if (strcmp(argv[1], "/windecomp") == 0)
+        {
+            config->log = fopen(log_path.c_str(), "wt");
+            if (fs::exists(argv[2]))
+                windows_decompress_cmd(argv[2], config, argv[0]);
+            fclose(config->log);
+        }
     }
     else
     {
         return false;
     }
     return true;
+}
+
+void windows_decompress_cmd(char* path_in, LZ41CONFIG* config, char* root)
+{
+    config->verbose = true;
+    auto temp_fl_path = fs::path(root).parent_path().append("windecomp.tmp").string();
+    if (!fs::exists(temp_fl_path))
+    {
+        //This is the master instance
+        FILE* tmp_fl = fopen(temp_fl_path.c_str(), "wt");
+        fprintf(tmp_fl, "%s\n", path_in);
+        fclose(tmp_fl);
+        this_thread::sleep_for(chrono::milliseconds(2000));
+
+        tmp_fl = fopen(temp_fl_path.c_str(), "rt");
+        char buffer[500];
+        while (fgets(buffer, 500, tmp_fl)) {
+
+            try {
+                char* ptr = strrchr(buffer, '\n');
+                *ptr = '\0';
+                auto file_path = fs::path(buffer);
+                auto outpath = file_path.parent_path().append("decompressed/");
+
+                create_directory(outpath);
+
+                string path = file_path.string();
+                string pathout = outpath.string().append(file_path.filename().string());
+
+                std::string str_ext = file_path.extension().string();
+                std::transform(str_ext.begin(), str_ext.end(), str_ext.begin(), ::tolower);
+
+                if (str_ext == ".vp")
+                {
+                    decompress_vp(path.c_str(), pathout.c_str(), config);
+                }
+                else
+                {
+                    if (!strstr(SYSTEM_IGNORE_LIST, str_ext.c_str()))
+                        decompress_single_file(path.c_str(), pathout.c_str(), config);
+                }
+            }
+            catch (const fs::filesystem_error& e)
+            {
+
+            }
+
+        }
+
+        if (tmp_fl != nullptr)
+            fclose(tmp_fl);
+
+        fs::remove(temp_fl_path.c_str());
+    }
+    else
+    {
+        //Slave instance
+        FILE* tmp_fl = fopen(temp_fl_path.c_str(), "a");
+        if (tmp_fl != nullptr)
+        {
+            fprintf(tmp_fl, "%s\n", path_in);
+            fclose(tmp_fl);
+        }
+    }
+}
+
+void windows_compress_cmd(char* path_in, LZ41CONFIG *config, char* root)
+{
+    auto temp_fl_path=fs::path(root).parent_path().append("wincomp.tmp").string();
+    if (!fs::exists(temp_fl_path))
+    {
+        //This is the master instance
+        FILE* tmp_fl = fopen(temp_fl_path.c_str(), "wt");
+        fprintf(tmp_fl, "%s\n", path_in);
+        fclose(tmp_fl);
+        this_thread::sleep_for(chrono::milliseconds(2000));
+
+        vector<thread> threads;
+        int thread_number = 1;
+        THREAD_INFO* ti = (THREAD_INFO*)malloc(config->max_threads * sizeof(THREAD_INFO));
+
+
+        tmp_fl = fopen(temp_fl_path.c_str(), "rt");
+        char buffer[500];
+        while (fgets(buffer, 500, tmp_fl)) {
+
+            try {
+                char *ptr = strrchr(buffer, '\n');
+                *ptr = '\0';
+                auto file_path = fs::path(buffer);
+                auto outpath = file_path.parent_path().append("compressed/");
+
+                create_directory(outpath);
+
+                string path = file_path.string();
+                string pathout = outpath.string().append(file_path.filename().string());
+
+                std::string str_ext = file_path.extension().string();
+                std::transform(str_ext.begin(), str_ext.end(), str_ext.begin(), ::tolower);
+
+                if (str_ext == ".vp")
+                {
+                    if (thread_number <= config->max_threads)
+                    {
+                        ti[thread_number - 1].thread_num = thread_number;
+                        strcpy(ti[thread_number - 1].current_file, file_path.filename().string().c_str());
+                        char* file_in = (char*)malloc(path.length() + 1);
+                        char* file_out = (char*)malloc(pathout.length() + 1);
+                        strcpy(file_in, path.c_str());
+                        strcpy(file_out, pathout.c_str());
+                        threads.emplace_back(compress_vp, file_in, file_out, config, &ti[thread_number - 1]);
+                        thread_number++;
+                    }
+                }
+                else if (!config->only_vps && !strstr(SYSTEM_IGNORE_LIST, str_ext.c_str()))
+                {
+                    if (thread_number <= config->max_threads)
+                    {
+                        ti[thread_number - 1].thread_num = thread_number;
+                        strcpy(ti[thread_number - 1].current_file, file_path.filename().string().c_str());
+                        char* file_in = (char*)malloc(path.length() + 1);
+                        char* file_out = (char*)malloc(pathout.length() + 1);
+                        strcpy(file_in, path.c_str());
+                        strcpy(file_out, pathout.c_str());
+                        threads.emplace_back(compress_single_file, file_in, file_out, config, &ti[thread_number - 1]);
+                        thread_number++;
+                    }
+                }
+
+                if (thread_number > config->max_threads)
+                {
+                    thread ui_thread(ui_gauges, ti, config);
+                    for (auto& th : threads)
+                        th.join();
+                    ui_thread.join();
+                    threads.clear();
+                    thread_number = 1;
+                    for (int i = 0; i < config->max_threads; i++)
+                        ti[i].max_files = 0;
+                }
+            }
+            catch (const fs::filesystem_error& e)
+            {
+
+            }
+
+        }
+
+        if(tmp_fl!=nullptr)
+            fclose(tmp_fl);
+
+        fs::remove(temp_fl_path.c_str());
+
+        thread ui_thread(ui_gauges, ti, config);
+
+        for (auto& th : threads)
+            th.join();
+        ui_thread.join();
+
+        free(ti);
+    }
+    else
+    {
+        //Slave instance
+        FILE* tmp_fl = fopen(temp_fl_path.c_str(), "a");
+        if (tmp_fl != nullptr)
+        {
+            fprintf(tmp_fl, "%s\n", path_in);
+            fclose(tmp_fl);
+        }
+    }
 }
 
 void compress_file(LZ41CONFIG* config, const char* pathc)
@@ -276,7 +467,7 @@ void ui_header(LZ41CONFIG* mainconfig)
     cout << " #                                    VP Compressor v" << VPC_VERSION << "                                        #" << "\n";
     cout << " ################################################################################################" << "\n";
     cout << " # VPC CONFIGURATION                                                                            #" << "\n";
-    cout << " # Block Size: " << mainconfig->block_size << "            ## Only Compress VPs: " << mainconfig->only_vps << "               ## Minimum Size: " << mainconfig->minimum_size << "\n";
+    cout << " # Block Size: " << mainconfig->block_size << "    ## Tag VPs: " << mainconfig->tag_c_vps << "    ## Only Compress VPs: " << mainconfig->only_vps << "    ## Minimum Size: " << mainconfig->minimum_size << "\n";
     cout << " # Max Threads: " << mainconfig->max_threads << "       ## Compression Level: " << mainconfig->compression_level << "         ## Convert pofs to version 2118: " << mainconfig->fix_pof << "\n";
     cout << " # Ignore List: " << mainconfig->ignore_list;
     if (!strchr(mainconfig->ignore_list, '\n'))
@@ -316,7 +507,7 @@ void ui_gauges(THREAD_INFO* ti, LZ41CONFIG *config)
     }
 }
 
-void load_config(LZ41CONFIG* mainconfig)
+void load_config(LZ41CONFIG* mainconfig, char* argv[])
 {
     strcpy(mainconfig->ignore_list, DEFAULT_IGNORE_LIST);
     mainconfig->minimum_size = DEFAULT_MINIMUM_SIZE;
@@ -326,10 +517,15 @@ void load_config(LZ41CONFIG* mainconfig)
     mainconfig->compression_level = DEFAULT_COMPRESSION_LEVEL;
     mainconfig->only_vps = (bool)DEFAULT_COMPRESS_ONLY_VP;
     mainconfig->tag_c_vps = (bool)DEFAULT_TAG_COMPRESSED_VP;
-    FILE* conf_file = fopen("vpcconfig.ini", "rt");
+    string config_path;
+    if(argv!=nullptr)
+        config_path = fs::path(argv[0]).parent_path().append("vpc_config.ini").string();
+    else
+        config_path = fs::current_path().append("vpc_config.ini").string();
+    FILE* conf_file = fopen(config_path.c_str(), "rt");
     if (conf_file == nullptr)
     {
-        conf_file = fopen("vpcconfig.ini", "wt");
+        conf_file = fopen(config_path.c_str(), "wt");
         fprintf(conf_file, "block_size=%d\n", mainconfig->block_size);
         fprintf(conf_file, "minimum_size=%d\n", mainconfig->minimum_size);
         fprintf(conf_file, "ignore_list=%s\n", mainconfig->ignore_list);

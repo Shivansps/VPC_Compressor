@@ -18,7 +18,8 @@ Additionally, command line arguments are allowed, these are:<br/>
 /decompress_folder path_to_folder<br/>
 /decompress_file path_to_file<br/>
 <br/>
-A windows context menu option will be added later.<br/>
+Along with the executable there is a register_menu_entry.cmd file for Windows, by running this file (where the VPCompressor.exe is) a context menu entry is added to<br/>
+Windows right click menu to allow easy compression and decompression of file (max 100 selected files are allowed, 101 is not going to work.
 <br/>
 <br/>
 
@@ -31,7 +32,7 @@ This is the size in bytes of LZ4 compressed blocks, the higher this number is, t
 Default value is 65536<br/><br/>
 
 minimum_size<br/>
-This is the minimum size in bytes that a file has to be to be compressed, this is used as a optimissation to avoid compressing files that are not worth it. This could be set 0 whiout any problem since files that end up bigger than original are ignored.<br/>
+This is the minimum size in bytes that a file has to be to be compressed, this is used as a optimisation to avoid compressing files that are not worth it. This could be set 0 without any problem since files that end up bigger than original are ignored.<br/>
 Default value is 10240<br/><br/>
 
 ignore_list<br/>
@@ -39,7 +40,7 @@ This is the list of file extension to be ignored for compression, there is no is
 Default value is ".ogg .wav .fc2 .fs2 .tbm .tbl"<br/><br/>
 
 max_threads<br/>
-The max number of compression threads, this is the maximum ammount of simultaneuos compression tasks.<br/>
+The max number of compression threads, this is the maximum amount of simultaneous compression tasks.<br/>
 Default value is 4<br/><br/>
 
 fix_pofs<br/>

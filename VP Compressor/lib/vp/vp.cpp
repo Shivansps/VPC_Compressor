@@ -20,14 +20,14 @@ void write_vp_header(FILE *vp,unsigned int index_offset, unsigned int num_files)
     }
 }
 
-void write_vp_index_entry(FILE *vp, vp_index_entry index)
+void write_vp_index_entry(FILE *vp, vp_index_entry * index_entry)
 {
     if(vp!=NULL)
     {
-        fwrite(&index.offset,4,1,vp);
-        fwrite(&index.filesize,4,1,vp);
-        fwrite(index.name,1,32,vp);
-        fwrite(&index.timestamp,4,1,vp);
+        fwrite(&index_entry->offset,4,1,vp);
+        fwrite(&index_entry->filesize,4,1,vp);
+        fwrite(index_entry->name,1,32,vp);
+        fwrite(&index_entry->timestamp,4,1,vp);
     }
 }
 
@@ -47,7 +47,7 @@ void write_vp_file(FILE *vp, char *file, char *name, unsigned int filesize, unsi
             write_vp_header(vp,*index_offset,*num_files);
             fseek(vp,*index_offset,SEEK_SET);
             for(int i=0;i<*num_files;i++)
-                write_vp_index_entry(vp,index[i]);
+                write_vp_index_entry(vp,&index[i]);
         }
         else
         {
@@ -63,26 +63,26 @@ void write_vp_file(FILE *vp, char *file, char *name, unsigned int filesize, unsi
             fwrite(file, 1, filesize, vp);
             (*index_offset) += filesize;
             for (int i = 0; i < *num_files; i++)
-                write_vp_index_entry(vp, index[i]);
+                write_vp_index_entry(vp, &index[i]);
         }
     }
 }
 
-char* load_vp_file(FILE *vp, vp_index_entry vp_index_entry)
+char* load_vp_file(FILE *vp, vp_index_entry *vp_index_entry)
 {
     if(vp!=NULL)
     {
         char *file;
-        file=(char*)malloc(vp_index_entry.filesize);
+        file=(char*)malloc(vp_index_entry->filesize);
         fseek(vp, 0, SEEK_SET);
-        fseek(vp, vp_index_entry.offset, SEEK_SET);
-        fread(file,vp_index_entry.filesize,1,vp);
+        fseek(vp, vp_index_entry->offset, SEEK_SET);
+        fread(file,vp_index_entry->filesize,1,vp);
         return file;
     }
     return NULL;
 }
 
-void load_vp_index(FILE *vp, vp_index_entry *vp_index_entry, unsigned int index_offset, unsigned int num_files)
+void load_vp_index(FILE *vp, vp_index_entry *vp_index, unsigned int index_offset, unsigned int num_files)
 {
     if(vp!=NULL)
     {
@@ -92,11 +92,11 @@ void load_vp_index(FILE *vp, vp_index_entry *vp_index_entry, unsigned int index_
         for(int x=0;x<num_files;x++)
         {
             fread(bytes,44,1,vp);
-            memcpy(&vp_index_entry[x].offset,bytes,4);
-            memcpy(&vp_index_entry[x].filesize,bytes+4,4);
-            memset(&vp_index_entry[x].name,'\0',32);
-            memcpy(&vp_index_entry[x].name,bytes+8,32);
-            memcpy(&vp_index_entry[x].timestamp,bytes+40,4);
+            memcpy(&vp_index[x].offset,bytes,4);
+            memcpy(&vp_index[x].filesize,bytes+4,4);
+            memset(&vp_index[x].name,'\0',32);
+            memcpy(&vp_index[x].name,bytes+8,32);
+            memcpy(&vp_index[x].timestamp,bytes+40,4);
         }
     }
 }
