@@ -8,7 +8,7 @@ using namespace std;
 namespace fs = filesystem;
 #pragma warning(disable:4996)
 
-#define VPC_VERSION "1.1"
+#define VPC_VERSION "1.2"
 #define DEFAULT_IGNORE_LIST ".ogg .wav .fc2 .fs2 .tbm .tbl"
 #define DEFAULT_MINIMUM_SIZE 10240
 #define DEFAULT_MAX_THREADS 4
@@ -16,10 +16,10 @@ namespace fs = filesystem;
 #define DEFAULT_COMPRESSION_LEVEL 6
 #define DEFAULT_FIX_POFS 0
 #define DEFAULT_COMPRESS_ONLY_VP 0
-#define DEFAULT_TAG_COMPRESSED_VP 0
+#define DEFAULT_TAG_COMPRESSED_VP 1
 #define SYSTEM_IGNORE_LIST ".exe .ini .dll .log .reg .sys .lnk"
 
-void compress_folder(LZ41CONFIG *config, const char* path);
+void compress_folder(LZ41CONFIG *config, const char* path, bool this_folder);
 void decompress_folder(LZ41CONFIG *config, const char * path);
 void compress_file(LZ41CONFIG* config, const char* pathc);
 void decompress_file(LZ41CONFIG* config, const char* pathc);
@@ -54,7 +54,7 @@ int main(int argc, char* argv[])
 
     auto log_path = fs::path(fs::current_path().append("vpc_log.log")).string();
     mainconfig.log = fopen(log_path.c_str(), "wt");
-    compress_folder(&mainconfig, fs::current_path().string().c_str());
+    compress_folder(&mainconfig, fs::current_path().string().c_str(),true);
     fclose(mainconfig.log);
 	return 0;
 }
@@ -69,7 +69,7 @@ bool parsecmd(int argc, char* argv[],LZ41CONFIG *config)
         {
             config->log = fopen(log_path.c_str(), "wt");
             if(fs::exists(argv[2]))
-                compress_folder(config, argv[2]);
+                compress_folder(config, argv[2],false);
             fclose(config->log);
         }
         if (strcmp(argv[1], "/decompress_folder") == 0)
@@ -126,33 +126,40 @@ void windows_decompress_cmd(char* path_in, LZ41CONFIG* config, char* root)
         fprintf(tmp_fl, "%s\n", path_in);
         fclose(tmp_fl);
         this_thread::sleep_for(chrono::milliseconds(2000));
+        vector<string> folders;
 
         tmp_fl = fopen(temp_fl_path.c_str(), "rt");
         char buffer[500];
         while (fgets(buffer, 500, tmp_fl)) {
-
             try {
                 char* ptr = strrchr(buffer, '\n');
                 *ptr = '\0';
                 auto file_path = fs::path(buffer);
                 auto outpath = file_path.parent_path().append("decompressed/");
-
-                create_directory(outpath);
-
-                string path = file_path.string();
-                string pathout = outpath.string().append(file_path.filename().string());
-
-                std::string str_ext = file_path.extension().string();
-                std::transform(str_ext.begin(), str_ext.end(), str_ext.begin(), ::tolower);
-
-                if (str_ext == ".vp")
+                if (fs::is_directory(file_path))
                 {
-                    decompress_vp(path.c_str(), pathout.c_str(), config);
+                    //Add to vector to process at the end
+                    folders.push_back(file_path.string());
                 }
                 else
                 {
-                    if (!strstr(SYSTEM_IGNORE_LIST, str_ext.c_str()))
-                        decompress_single_file(path.c_str(), pathout.c_str(), config);
+                    create_directory(outpath);
+
+                    string path = file_path.string();
+                    string pathout = outpath.string().append(file_path.filename().string());
+
+                    std::string str_ext = file_path.extension().string();
+                    std::transform(str_ext.begin(), str_ext.end(), str_ext.begin(), ::tolower);
+
+                    if (str_ext == ".vp")
+                    {
+                        decompress_vp(path.c_str(), pathout.c_str(), config);
+                    }
+                    else
+                    {
+                        if (!strstr(SYSTEM_IGNORE_LIST, str_ext.c_str()))
+                            decompress_single_file(path.c_str(), pathout.c_str(), config);
+                    }
                 }
             }
             catch (const fs::filesystem_error& e)
@@ -166,6 +173,11 @@ void windows_decompress_cmd(char* path_in, LZ41CONFIG* config, char* root)
             fclose(tmp_fl);
 
         fs::remove(temp_fl_path.c_str());
+
+        //Process all folders one by one
+        for (auto i : folders) {
+            decompress_folder(config, i.c_str());
+        }
     }
     else
     {
@@ -179,9 +191,9 @@ void windows_decompress_cmd(char* path_in, LZ41CONFIG* config, char* root)
     }
 }
 
-void windows_compress_cmd(char* path_in, LZ41CONFIG *config, char* root)
+void windows_compress_cmd(char* path_in, LZ41CONFIG* config, char* root)
 {
-    auto temp_fl_path=fs::path(root).parent_path().append("wincomp.tmp").string();
+    auto temp_fl_path = fs::path(root).parent_path().append("wincomp.tmp").string();
     if (!fs::exists(temp_fl_path))
     {
         //This is the master instance
@@ -191,67 +203,73 @@ void windows_compress_cmd(char* path_in, LZ41CONFIG *config, char* root)
         this_thread::sleep_for(chrono::milliseconds(2000));
 
         vector<thread> threads;
+        vector<string> folders;
         int thread_number = 1;
         THREAD_INFO* ti = (THREAD_INFO*)malloc(config->max_threads * sizeof(THREAD_INFO));
-
 
         tmp_fl = fopen(temp_fl_path.c_str(), "rt");
         char buffer[500];
         while (fgets(buffer, 500, tmp_fl)) {
-
             try {
-                char *ptr = strrchr(buffer, '\n');
+                char* ptr = strrchr(buffer, '\n');
                 *ptr = '\0';
                 auto file_path = fs::path(buffer);
                 auto outpath = file_path.parent_path().append("compressed/");
-
-                create_directory(outpath);
-
-                string path = file_path.string();
-                string pathout = outpath.string().append(file_path.filename().string());
-
-                std::string str_ext = file_path.extension().string();
-                std::transform(str_ext.begin(), str_ext.end(), str_ext.begin(), ::tolower);
-
-                if (str_ext == ".vp")
+                if (fs::is_directory(file_path))
                 {
-                    if (thread_number <= config->max_threads)
-                    {
-                        ti[thread_number - 1].thread_num = thread_number;
-                        strcpy(ti[thread_number - 1].current_file, file_path.filename().string().c_str());
-                        char* file_in = (char*)malloc(path.length() + 1);
-                        char* file_out = (char*)malloc(pathout.length() + 1);
-                        strcpy(file_in, path.c_str());
-                        strcpy(file_out, pathout.c_str());
-                        threads.emplace_back(compress_vp, file_in, file_out, config, &ti[thread_number - 1]);
-                        thread_number++;
-                    }
+                    //Add to vector to process at the end
+                    folders.push_back(file_path.string());
                 }
-                else if (!config->only_vps && !strstr(SYSTEM_IGNORE_LIST, str_ext.c_str()))
+                else
                 {
-                    if (thread_number <= config->max_threads)
-                    {
-                        ti[thread_number - 1].thread_num = thread_number;
-                        strcpy(ti[thread_number - 1].current_file, file_path.filename().string().c_str());
-                        char* file_in = (char*)malloc(path.length() + 1);
-                        char* file_out = (char*)malloc(pathout.length() + 1);
-                        strcpy(file_in, path.c_str());
-                        strcpy(file_out, pathout.c_str());
-                        threads.emplace_back(compress_single_file, file_in, file_out, config, &ti[thread_number - 1]);
-                        thread_number++;
-                    }
-                }
+                    create_directory(outpath);
 
-                if (thread_number > config->max_threads)
-                {
-                    thread ui_thread(ui_gauges, ti, config);
-                    for (auto& th : threads)
-                        th.join();
-                    ui_thread.join();
-                    threads.clear();
-                    thread_number = 1;
-                    for (int i = 0; i < config->max_threads; i++)
-                        ti[i].max_files = 0;
+                    string path = file_path.string();
+                    string pathout = outpath.string().append(file_path.filename().string());
+
+                    std::string str_ext = file_path.extension().string();
+                    std::transform(str_ext.begin(), str_ext.end(), str_ext.begin(), ::tolower);
+
+                    if (str_ext == ".vp")
+                    {
+                        if (thread_number <= config->max_threads)
+                        {
+                            ti[thread_number - 1].thread_num = thread_number;
+                            strcpy(ti[thread_number - 1].current_file, file_path.filename().string().c_str());
+                            char* file_in = (char*)malloc(path.length() + 1);
+                            char* file_out = (char*)malloc(pathout.length() + 1);
+                            strcpy(file_in, path.c_str());
+                            strcpy(file_out, pathout.c_str());
+                            threads.emplace_back(compress_vp, file_in, file_out, config, &ti[thread_number - 1]);
+                            thread_number++;
+                        }
+                    }
+                    else if (!config->only_vps && !strstr(SYSTEM_IGNORE_LIST, str_ext.c_str()))
+                    {
+                        if (thread_number <= config->max_threads)
+                        {
+                            ti[thread_number - 1].thread_num = thread_number;
+                            strcpy(ti[thread_number - 1].current_file, file_path.filename().string().c_str());
+                            char* file_in = (char*)malloc(path.length() + 1);
+                            char* file_out = (char*)malloc(pathout.length() + 1);
+                            strcpy(file_in, path.c_str());
+                            strcpy(file_out, pathout.c_str());
+                            threads.emplace_back(compress_single_file, file_in, file_out, config, &ti[thread_number - 1]);
+                            thread_number++;
+                        }
+                    }
+
+                    if (thread_number > config->max_threads)
+                    {
+                        thread ui_thread(ui_gauges, ti, config);
+                        for (auto& th : threads)
+                            th.join();
+                        ui_thread.join();
+                        threads.clear();
+                        thread_number = 1;
+                        for (int i = 0; i < config->max_threads; i++)
+                            ti[i].max_files = 0;
+                    }
                 }
             }
             catch (const fs::filesystem_error& e)
@@ -261,7 +279,7 @@ void windows_compress_cmd(char* path_in, LZ41CONFIG *config, char* root)
 
         }
 
-        if(tmp_fl!=nullptr)
+        if (tmp_fl != nullptr)
             fclose(tmp_fl);
 
         fs::remove(temp_fl_path.c_str());
@@ -273,6 +291,11 @@ void windows_compress_cmd(char* path_in, LZ41CONFIG *config, char* root)
         ui_thread.join();
 
         free(ti);
+
+        //Process all folders one by one
+        for (auto i : folders) {
+            compress_folder(config, i.c_str(),false);
+        }
     }
     else
     {
@@ -309,17 +332,17 @@ void compress_file(LZ41CONFIG* config, const char* pathc)
 
     if (str_ext == ".vp")
     {
-            thread wthread(compress_vp, file_in, file_out, config, &ti);
-            thread ui_thread(ui_gauges, &ti, config);
-            wthread.join();
-            ui_thread.join();
+        thread wthread(compress_vp, file_in, file_out, config, &ti);
+        thread ui_thread(ui_gauges, &ti, config);
+        wthread.join();
+        ui_thread.join();
     }
     else
     {
-            thread wthread(compress_single_file, file_in, file_out, config, &ti);
-            thread ui_thread(ui_gauges, &ti, config);
-            wthread.join();
-            ui_thread.join();
+        thread wthread(compress_single_file, file_in, file_out, config, &ti);
+        thread ui_thread(ui_gauges, &ti, config);
+        wthread.join();
+        ui_thread.join();
     }
 }
 
@@ -348,12 +371,16 @@ void decompress_file(LZ41CONFIG* config, const char* pathc)
 }
 
 
-void compress_folder(LZ41CONFIG *config, const char* pathc)
+void compress_folder(LZ41CONFIG* config, const char* pathc, bool this_folder)
 {
     vector<thread> threads;
     int thread_number = 1;
     THREAD_INFO* ti = (THREAD_INFO*)malloc(config->max_threads * sizeof(THREAD_INFO));
-    auto outpath = fs::path(pathc).append("compressed/");
+    auto outpath = fs::path(pathc).parent_path().append(fs::path(pathc).filename().string().append("_compressed/"));
+    if (this_folder)
+    {
+        outpath = fs::path(pathc).append("compressed/");
+    }
 
     create_directory(outpath);
 
@@ -378,7 +405,7 @@ void compress_folder(LZ41CONFIG *config, const char* pathc)
                         char* file_out = (char*)malloc(pathout.length() + 1);
                         strcpy(file_in, path.c_str());
                         strcpy(file_out, pathout.c_str());
-                        threads.emplace_back(compress_vp, file_in, file_out, config, &ti[thread_number-1]);
+                        threads.emplace_back(compress_vp, file_in, file_out, config, &ti[thread_number - 1]);
                         thread_number++;
                     }
                 }
@@ -386,20 +413,20 @@ void compress_folder(LZ41CONFIG *config, const char* pathc)
                 {
                     if (thread_number <= config->max_threads)
                     {
-                        ti[thread_number-1].thread_num = thread_number;
+                        ti[thread_number - 1].thread_num = thread_number;
                         strcpy(ti[thread_number - 1].current_file, entry.path().filename().string().c_str());
                         char* file_in = (char*)malloc(path.length() + 1);
                         char* file_out = (char*)malloc(pathout.length() + 1);
                         strcpy(file_in, path.c_str());
                         strcpy(file_out, pathout.c_str());
-                        threads.emplace_back(compress_single_file, file_in, file_out, config, &ti[thread_number-1]);
+                        threads.emplace_back(compress_single_file, file_in, file_out, config, &ti[thread_number - 1]);
                         thread_number++;
                     }
                 }
 
                 if (thread_number > config->max_threads)
                 {
-                    thread ui_thread(ui_gauges, ti, config);                 
+                    thread ui_thread(ui_gauges, ti, config);
                     for (auto& th : threads)
                         th.join();
                     ui_thread.join();
@@ -410,14 +437,14 @@ void compress_folder(LZ41CONFIG *config, const char* pathc)
                 }
             }
         }
-        catch(const fs::filesystem_error& e)
+        catch (const fs::filesystem_error& e)
         {
 
         }
     }
 
     thread ui_thread(ui_gauges, ti, config);
-    
+
     for (auto& th : threads)
         th.join();
     ui_thread.join();
@@ -428,7 +455,7 @@ void compress_folder(LZ41CONFIG *config, const char* pathc)
 void decompress_folder(LZ41CONFIG* config, const char* path)
 {
     config->verbose = true;
-    auto outpath = fs::path(path).append("decompressed/");
+    auto outpath = fs::path(path).parent_path().append(fs::path(path).filename().string().append("_decompressed/"));
 
     fs::create_directory(outpath);
 
@@ -449,7 +476,7 @@ void decompress_folder(LZ41CONFIG* config, const char* path)
                 }
                 else
                 {
-                    if(!strstr(SYSTEM_IGNORE_LIST, str_ext.c_str()))
+                    if (!strstr(SYSTEM_IGNORE_LIST, str_ext.c_str()))
                         decompress_single_file(path.c_str(), pathout.c_str(), config);
                 }
             }

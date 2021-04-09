@@ -29,8 +29,9 @@ int lz41_compress_memory(char* bytes_in, char* bytes_out,int original_size, cons
     LZ4_stream_t* lz4Stream = &lz4Stream_body;
 
     char* inpBuf = (char*)malloc(config->block_size);
-    int max_blocks = original_size + 8 / config->block_size;
-    int* offsets = (int*)malloc(max_blocks);
+    int max_blocks = LZ4_compressBound(original_size) / config->block_size;
+    max_blocks += config->block_size;
+    int* offsets = (int*)malloc(max_blocks * sizeof(int));
     int* offsetsEnd = offsets;
     int in_offset = 0;
     int written_bytes = 0;
@@ -111,8 +112,9 @@ int lz41_compress_memory_HC(char* bytes_in, char* bytes_out, int original_size, 
     LZ4_streamHC_t* lz4Stream = &lz4Stream_body;
 
     char *inpBuf=(char*)malloc(config->block_size);
-    int max_blocks = original_size + 8 / config->block_size;
-    int* offsets = (int*)malloc(max_blocks);
+    int max_blocks = LZ4_compressBound(original_size) / config->block_size;
+    max_blocks += config->block_size;
+    int* offsets = (int*)malloc(max_blocks*sizeof(int));
     int* offsetsEnd = offsets;
     int in_offset = 0;
     int written_bytes = 0;
@@ -200,8 +202,7 @@ int lz41_decompress_memory(char* bytes_in, char* bytes_out, int compressed_size)
     memcpy(&block_size, bytes_in + compressed_size - 4, sizeof(int));
 
     char *decBuf=(char*)malloc(block_size);
-    int max_blocks = length + 8 / block_size;
-    int* offsets = (int*)malloc(max_blocks);
+    int* offsets = (int*)malloc(numOffsets*sizeof(int));
 
     /*Read Header*/
     char header[sizeof(LZ41_FILE_HEADER)];
@@ -264,8 +265,9 @@ int lz41_stream_compress( FILE* file_in, FILE* file_out, const LZ41CONFIG *confi
     char *inpBuf=(char*)malloc(config->block_size);
     fseek(file_in, 0, SEEK_END);
     int file_size = ftell(file_in);
-    int max_blocks = file_size + 8 / config->block_size;
-    int* offsets = (int*)malloc(max_blocks);
+    int max_blocks = LZ4_compressBound(file_size) / config->block_size;
+    max_blocks += config->block_size;
+    int* offsets = (int*)malloc(max_blocks * sizeof(int));
     int* offsetsEnd = offsets;
     fseek(file_in, 0, SEEK_SET);
 
@@ -338,8 +340,9 @@ int lz41_stream_compress_HC(FILE* file_in, FILE* file_out, const LZ41CONFIG *con
     char *inpBuf=(char*)malloc(config->block_size);
     fseek(file_in, 0, SEEK_END);
     int file_size = ftell(file_in);
-    int max_blocks = file_size + 8 / config->block_size;
-    int* offsets = (int*)malloc(max_blocks);
+    int max_blocks = LZ4_compressBound(file_size) / config->block_size;
+    max_blocks += config->block_size;
+    int* offsets = (int*)malloc(max_blocks * sizeof(int));
     int* offsetsEnd = offsets;
     fseek(file_in, 0, SEEK_SET);
 
@@ -432,8 +435,7 @@ int lz41_stream_decompress(FILE* file_in, FILE* file_out)
 
     char* decBuf = (char*)malloc(block_size);
     fseek(file_in, 0, SEEK_END);
-    int max_blocks = ftell(file_in) + 8 / block_size;
-    int* offsets = (int*)malloc(max_blocks);
+    int* offsets = (int*)malloc(numOffsets*sizeof(int));
     fseek(file_in, 0, SEEK_SET);
 
     /* The blocks [currentBlock, endBlock) contain the data we want */
@@ -628,9 +630,18 @@ void decompress_single_file(const char* fn_in, const char* fn_out, const LZ41CON
 
         int final_size=lz41_stream_decompress(file_in, file_out);
 
-        if (final_size<=0)
+        if (final_size == LZ41_HEADER_MISMATCH)
         {
-            if(config->verbose)
+            if (config->verbose)
+                std::cout << "\n" << "File : " << fn_in << "\n" << " was not compressed, copying..." << "\n";
+            if (config->log != nullptr)
+                fprintf(config->log, "\nFile %s was not compressed, copying...", fn_in);
+            fs::copy_file(fn_in, fn_out, fs::copy_options::overwrite_existing);
+
+        }
+        else if (final_size <= 0) 
+        {
+            if (config->verbose)
                 std::cout << "\n" << "Unable to open file : " << fn_in << "\n" << "or file header does not match" << "\n";
             if (config->log != nullptr)
                 fprintf(config->log, "\nUnable to open file %s or file header does not match", fn_in);
