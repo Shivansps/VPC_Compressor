@@ -19,7 +19,8 @@ Additionally, command line arguments are allowed, these are:<br/>
 /decompress_file path_to_file<br/>
 <br/>
 Along with the executable there is a register_menu_entry.cmd file for Windows, by running this file (where the VPCompressor.exe is) a context menu entry is added to<br/>
-Windows right click menu to allow easy compression and decompression of file (max 100 selected files are allowed, 101 is not going to work.
+Windows right click menu to allow easy compression and decompression of file (max 100 selected files are allowed, 101 is not going to work.<br/>
+As of version 1.2 folder compression (non recursive) was added, this will compress all the files inside each folder individually.
 <br/>
 <br/>
 
@@ -58,6 +59,6 @@ Default value is 6<br/><br/>
 
 tag_compressed_vps<br/>
 Enabling this option will add "_vpc" to the vp name if the VP contains at least 1 compressed file inside.<br/>
-Default value is 0 (disabled)<br/>
+Default value is 1 (enabled)<br/>
 
 

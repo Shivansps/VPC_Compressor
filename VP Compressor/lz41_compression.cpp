@@ -805,13 +805,20 @@ void compress_vp(char *fn_in, char *fn_out, const LZ41CONFIG *config, THREAD_INF
     fclose(vp_in);
     fclose(vp_out);
     ti->finished_files = ti->max_files;
+
     /* Tag Compressed VPs */
-    if (fs::exists(fn_out) && is_compressed && config->tag_c_vps)
+    try {
+        if (fs::exists(fn_out) && is_compressed && config->tag_c_vps)
+        {
+            std::string path = fs::path(fn_out).string();
+            std::string pathout = path.substr(0, path.length() - 3).append("_vpc.vp");
+            fs::rename(path, pathout);
+        }
+    }catch (const fs::filesystem_error& e)
     {
-        std::string path = fs::path(fn_out).string();
-        std::string pathout = path.substr(0, path.length() - 3).append("_vpc.vp");
-        fs::rename(path,pathout);
+
     }
+
     strcpy(ti->vp_file, "FINISHED!");
     if (config->log != nullptr)
         fprintf(config->log, "\n[THREAD #%d] COMPRESSING VP %s DONE!", ti->thread_num, fn_in);

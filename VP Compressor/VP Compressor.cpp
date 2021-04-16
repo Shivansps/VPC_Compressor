@@ -4,11 +4,12 @@
 #include <vector> 
 #include <filesystem>
 #include "lz41_compression.h"
+
 using namespace std;
 namespace fs = filesystem;
 #pragma warning(disable:4996)
 
-#define VPC_VERSION "1.2"
+#define VPC_VERSION "1.3"
 #define DEFAULT_IGNORE_LIST ".ogg .wav .fc2 .fs2 .tbm .tbl"
 #define DEFAULT_MINIMUM_SIZE 10240
 #define DEFAULT_MAX_THREADS 4
@@ -29,6 +30,8 @@ void ui_header(LZ41CONFIG *mainconfig);
 void ui_gauges(THREAD_INFO* ti, LZ41CONFIG *config);
 void windows_compress_cmd(char* path_in, LZ41CONFIG* config, char* root);
 void windows_decompress_cmd(char* path_in, LZ41CONFIG* config, char* root);
+void windows_decompress_cmd_new(char* path_in, LZ41CONFIG* config, char* root);
+void windows_compress_cmd_new(char* path_in, LZ41CONFIG* config, char* root);
 
 int main(int argc, char* argv[])
 {
@@ -49,7 +52,6 @@ int main(int argc, char* argv[])
 
     cout << " =>The working folder is: " << fs::current_path() << "\n\n";
     cout << " =>Press any key to compress all files inside the working folder or close the application.\n\n\n\n";
-
     system("pause");
 
     auto log_path = fs::path(fs::current_path().append("vpc_log.log")).string();
@@ -64,7 +66,7 @@ bool parsecmd(int argc, char* argv[],LZ41CONFIG *config)
     if (argc > 2)
     {
         ui_header(config);
-        auto log_path = fs::path(argv[0]).parent_path().append("vpc_log.log").string();
+        auto log_path = fs::path(argv[2]).parent_path().append("vpc_log.log").string();
         if (strcmp(argv[1], "/compress_folder") == 0)
         {
             config->log = fopen(log_path.c_str(), "wt");
@@ -97,14 +99,14 @@ bool parsecmd(int argc, char* argv[],LZ41CONFIG *config)
         {
             config->log = fopen(log_path.c_str(), "wt");
             if (fs::exists(argv[2]))
-                windows_compress_cmd(argv[2],config,argv[0]);
+                windows_compress_cmd_new(argv[2],config,argv[0]);
             fclose(config->log);
         }
         if (strcmp(argv[1], "/windecomp") == 0)
         {
             config->log = fopen(log_path.c_str(), "wt");
             if (fs::exists(argv[2]))
-                windows_decompress_cmd(argv[2], config, argv[0]);
+                windows_decompress_cmd_new(argv[2], config, argv[0]);
             fclose(config->log);
         }
     }
@@ -177,6 +179,208 @@ void windows_decompress_cmd(char* path_in, LZ41CONFIG* config, char* root)
         //Process all folders one by one
         for (auto i : folders) {
             decompress_folder(config, i.c_str());
+        }
+    }
+    else
+    {
+        //Slave instance
+        FILE* tmp_fl = fopen(temp_fl_path.c_str(), "a");
+        if (tmp_fl != nullptr)
+        {
+            fprintf(tmp_fl, "%s\n", path_in);
+            fclose(tmp_fl);
+        }
+    }
+}
+
+void windows_decompress_cmd_new(char* path_in, LZ41CONFIG* config, char* root)
+{
+    config->verbose = true;
+    auto temp_fl_path = fs::path(root).parent_path().append("windecomp.tmp").string();
+    if (!fs::exists(temp_fl_path))
+    {
+        //This is the master instance
+        FILE* tmp_fl = fopen(temp_fl_path.c_str(), "wt");
+        fprintf(tmp_fl, "%s\n", path_in);
+        fclose(tmp_fl);
+        this_thread::sleep_for(chrono::milliseconds(3000));
+        vector<string> folders;
+        vector<fs::path> files;
+
+        tmp_fl = fopen(temp_fl_path.c_str(), "rt");
+        char buffer[500];
+        while (fgets(buffer, 500, tmp_fl)) {
+            char* ptr = strrchr(buffer, '\n');
+            *ptr = '\0';
+            files.push_back(fs::path(buffer));
+        }
+
+        if (tmp_fl != nullptr)
+            fclose(tmp_fl);
+        fs::remove(temp_fl_path);
+
+        for (auto file_path : files) {
+            try {
+                auto outpath = file_path.parent_path().append("decompressed/");
+                if (fs::is_directory(file_path))
+                {
+                    //Add to vector to process at the end
+                    folders.push_back(file_path.string());
+                }
+                else
+                {
+                    create_directory(outpath);
+
+                    string path = file_path.string();
+                    string pathout = outpath.string().append(file_path.filename().string());
+
+                    std::string str_ext = file_path.extension().string();
+                    std::transform(str_ext.begin(), str_ext.end(), str_ext.begin(), ::tolower);
+
+                    if (str_ext == ".vp")
+                    {
+                        decompress_vp(path.c_str(), pathout.c_str(), config);
+                    }
+                    else
+                    {
+                        if (!strstr(SYSTEM_IGNORE_LIST, str_ext.c_str()))
+                            decompress_single_file(path.c_str(), pathout.c_str(), config);
+                    }
+                }
+            }
+            catch (const fs::filesystem_error& e)
+            {
+
+            }
+
+        }
+
+        if (tmp_fl != nullptr)
+            fclose(tmp_fl);
+
+        fs::remove(temp_fl_path.c_str());
+
+        //Process all folders one by one
+        for (auto i : folders) {
+            decompress_folder(config, i.c_str());
+        }
+    }
+    else
+    {
+        //Slave instance
+        FILE* tmp_fl = fopen(temp_fl_path.c_str(), "a");
+        if (tmp_fl != nullptr)
+        {
+            fprintf(tmp_fl, "%s\n", path_in);
+            fclose(tmp_fl);
+        }
+    }
+}
+
+void windows_compress_cmd_new(char* path_in, LZ41CONFIG* config, char* root)
+{
+    auto temp_fl_path = fs::path(root).parent_path().append("wincomp.tmp").string();
+    if (!fs::exists(temp_fl_path))
+    {
+        //This is the master instance
+        FILE* tmp_fl = fopen(temp_fl_path.c_str(), "wt");
+        fprintf(tmp_fl, "%s\n", path_in);
+        fclose(tmp_fl);
+        this_thread::sleep_for(chrono::milliseconds(3000));
+
+        vector<thread> threads;
+        vector<string> folders;
+        vector<fs::path> files;
+        int thread_number = 1;
+        THREAD_INFO* ti = (THREAD_INFO*)malloc(config->max_threads * sizeof(THREAD_INFO));
+
+        tmp_fl = fopen(temp_fl_path.c_str(), "rt");
+        char buffer[500];
+        while (fgets(buffer, 500, tmp_fl)) {
+            char* ptr = strrchr(buffer, '\n');
+            *ptr = '\0';
+            files.push_back(fs::path(buffer));
+        }
+
+        if (tmp_fl != nullptr)
+            fclose(tmp_fl);
+        fs::remove(temp_fl_path);
+
+        for(auto file_path : files){
+            try {
+                auto outpath = file_path.parent_path().append("compressed/");
+                if (fs::is_directory(file_path))
+                {
+                    //Add to vector to process at the end
+                    folders.push_back(file_path.string());
+                }
+                else
+                {
+                    create_directory(outpath);
+
+                    string path = file_path.string();
+                    string pathout = outpath.string().append(file_path.filename().string());
+
+                    std::string str_ext = file_path.extension().string();
+                    std::transform(str_ext.begin(), str_ext.end(), str_ext.begin(), ::tolower);
+
+                    if (str_ext == ".vp")
+                    {
+                        if (thread_number <= config->max_threads)
+                        {
+                            ti[thread_number - 1].thread_num = thread_number;
+                            strcpy(ti[thread_number - 1].current_file, file_path.filename().string().c_str());
+                            char* file_in = (char*)malloc(path.length() + 1);
+                            char* file_out = (char*)malloc(pathout.length() + 1);
+                            strcpy(file_in, path.c_str());
+                            strcpy(file_out, pathout.c_str());
+                            threads.emplace_back(compress_vp, file_in, file_out, config, &ti[thread_number - 1]);
+                            thread_number++;
+                        }
+                    }
+                    else if (!config->only_vps && !strstr(SYSTEM_IGNORE_LIST, str_ext.c_str()))
+                    {
+                        if (thread_number <= config->max_threads)
+                        {
+                            ti[thread_number - 1].thread_num = thread_number;
+                            strcpy(ti[thread_number - 1].current_file, file_path.filename().string().c_str());
+                            char* file_in = (char*)malloc(path.length() + 1);
+                            char* file_out = (char*)malloc(pathout.length() + 1);
+                            strcpy(file_in, path.c_str());
+                            strcpy(file_out, pathout.c_str());
+                            threads.emplace_back(compress_single_file, file_in, file_out, config, &ti[thread_number - 1]);
+                            thread_number++;
+                        }
+                    }
+
+                    if (thread_number > config->max_threads)
+                    {
+                        thread ui_thread(ui_gauges, ti, config);
+                        for (auto& th : threads)
+                            th.join();
+                        ui_thread.join();
+                        threads.clear();
+                        thread_number = 1;
+                        for (int i = 0; i < config->max_threads; i++)
+                            ti[i].max_files = 0;
+                    }
+                }
+            }
+            catch (const fs::filesystem_error& e)
+            {
+
+            }
+        }
+
+        thread ui_thread(ui_gauges, ti, config);
+
+        for (auto& th : threads)
+            th.join();
+        ui_thread.join();
+
+        //Process all folders one by one
+        for (auto i : folders) {
+            compress_folder(config, i.c_str(), false);
         }
     }
     else
@@ -289,8 +493,6 @@ void windows_compress_cmd(char* path_in, LZ41CONFIG* config, char* root)
         for (auto& th : threads)
             th.join();
         ui_thread.join();
-
-        free(ti);
 
         //Process all folders one by one
         for (auto i : folders) {
@@ -448,8 +650,6 @@ void compress_folder(LZ41CONFIG* config, const char* pathc, bool this_folder)
     for (auto& th : threads)
         th.join();
     ui_thread.join();
-
-    free(ti);
 }
 
 void decompress_folder(LZ41CONFIG* config, const char* path)
