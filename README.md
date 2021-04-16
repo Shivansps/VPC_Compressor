@@ -59,6 +59,6 @@ Default value is 6<br/><br/>
 
 tag_compressed_vps<br/>
 Enabling this option will add "_vpc" to the vp name if the VP contains at least 1 compressed file inside.<br/>
-Default value is 1 (enabled)<br/>
+Default value is 0 (disabled)<br/>
 
 
