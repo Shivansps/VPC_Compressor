@@ -1,9 +1,9 @@
 #ifndef ALIGNER_H_INCLUDED
 #define ALIGNER_H_INCLUDED
-#define VERSION "0.3"
+#define VERSION "0.4"
 
 /*
-Only convert to 2117 to 2118 in order not to break internal structures of older versions
+Only convert to 2117 to 2200 in order not to break internal structures of older versions
 -pof_bytes is the pointer to the buffer containing the cached pof file.
 -total_size is the original file size of the pof.
 -aligned_pof is the pointer where the aligned pof will be written to, memory has to be already

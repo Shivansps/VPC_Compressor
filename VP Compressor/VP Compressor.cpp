@@ -9,13 +9,13 @@ using namespace std;
 namespace fs = filesystem;
 #pragma warning(disable:4996)
 
-#define VPC_VERSION "1.3b"
+#define VPC_VERSION "1.4"
 #define DEFAULT_IGNORE_LIST ".ogg .wav .fc2 .fs2 .tbm .tbl"
 #define DEFAULT_MINIMUM_SIZE 10240
 #define DEFAULT_MAX_THREADS 4
 #define DEFAULT_BLOCK_SIZE 65536
 #define DEFAULT_COMPRESSION_LEVEL 6
-#define DEFAULT_FIX_POFS 0
+#define DEFAULT_FIX_POFS 1
 #define DEFAULT_COMPRESS_ONLY_VP 0
 #define DEFAULT_TAG_COMPRESSED_VP 0
 #define SYSTEM_IGNORE_LIST ".exe .ini .dll .log .reg .sys .lnk"
@@ -695,7 +695,7 @@ void ui_header(LZ41CONFIG* mainconfig)
     cout << " ################################################################################################" << "\n";
     cout << " # VPC CONFIGURATION                                                                            #" << "\n";
     cout << " # Block Size: " << mainconfig->block_size << "    ## Tag VPs: " << mainconfig->tag_c_vps << "    ## Only Compress VPs: " << mainconfig->only_vps << "    ## Minimum Size: " << mainconfig->minimum_size << "\n";
-    cout << " # Max Threads: " << mainconfig->max_threads << "       ## Compression Level: " << mainconfig->compression_level << "         ## Convert pofs to version 2118: " << mainconfig->fix_pof << "\n";
+    cout << " # Max Threads: " << mainconfig->max_threads << "       ## Compression Level: " << mainconfig->compression_level << "         ## Convert pofs to version 2200: " << mainconfig->fix_pof << "\n";
     cout << " # Ignore List: " << mainconfig->ignore_list;
     if (!strchr(mainconfig->ignore_list, '\n'))
         cout << "\n";

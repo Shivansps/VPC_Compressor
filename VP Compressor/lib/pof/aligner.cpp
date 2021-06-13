@@ -21,7 +21,7 @@ size_t align_pof(char *pof_bytes, size_t total_size, char *aligned_pof, bool ver
  {
     int chunk_size;
     size_t copied=0;
-    int new_pof_version=2118;
+    int new_pof_version=2200;
     char chunk_typechar[5];
     int unaligned=0;
     int version;

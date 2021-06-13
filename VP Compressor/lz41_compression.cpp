@@ -529,9 +529,9 @@ void compress_single_file(char* fn_in, char* fn_out, const LZ41CONFIG *config, T
                     fread(bytes_in, 1, size, file_in);
 
                     if (config->log != nullptr)
-                        fprintf(config->log, "\n[THREAD #%d] ==> CONVERTING POF %s TO VERSION 2118...\n", ti->thread_num, fn_in);
+                        fprintf(config->log, "\n[THREAD #%d] ==> CONVERTING POF %s TO VERSION 2200...\n", ti->thread_num, fn_in);
                     if (config->verbose)
-                        printf("\n[THREAD #%d] ==> CONVERTING POF %s TO VERSION 2118...\n", ti->thread_num, fn_in);
+                        printf("\n[THREAD #%d] ==> CONVERTING POF %s TO VERSION 2200...\n", ti->thread_num, fn_in);
 
                     size = align_pof(bytes_in, size, fixed_pof, false);
                     free(bytes_in);
@@ -725,9 +725,9 @@ void compress_vp(char *fn_in, char *fn_out, const LZ41CONFIG *config, THREAD_INF
                     if (version == 2117)
                     {
                         if (config->log != nullptr)
-                            fprintf(config->log, "\n[THREAD #%d] ==> CONVERTING POF %s TO VERSION 2118...\n", ti->thread_num, index[x].name);
+                            fprintf(config->log, "\n[THREAD #%d] ==> CONVERTING POF %s TO VERSION 2200...\n", ti->thread_num, index[x].name);
                         if (config->verbose)
-                            printf("\n[THREAD #%d] ==> CONVERTING POF %s TO VERSION 2118...\n", ti->thread_num, index[x].name);
+                            printf("\n[THREAD #%d] ==> CONVERTING POF %s TO VERSION 2200...\n", ti->thread_num, index[x].name);
                         char* fixed_pof = (char*)malloc(index[x].filesize * 2);
                         memset(fixed_pof, '\0', index[x].filesize * 2);
                         index[x].filesize = align_pof(file, index[x].filesize, fixed_pof, false);

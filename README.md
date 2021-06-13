@@ -45,8 +45,8 @@ The max number of compression threads, this is the maximum amount of simultaneou
 Default value is 4<br/><br/>
 
 fix_pofs<br/>
-This setting allows for converting .pof files from version 2117 to version 2118 format. This is the pof_aligner code, since this is still experimental it is set to disabled by default.<br/>
-Default value 0 (disabled)<br/><br/>
+This setting allows for converting .pof files from version 2117 to version 2200 format. This is the pof_aligner code.<br/>
+Default value 1 (enabled)<br/><br/>
 
 only_compress_vps<br/>
 Enabling this option makes VPC to only compress vp files and ignore everything else on the folder.<br/>
